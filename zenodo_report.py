@@ -14,7 +14,13 @@ from colorlog import ColoredFormatter
 # Configure logging
 LOG_LEVEL = logging.DEBUG  # Change to desired log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 LOG_FORMAT = "%(log_color)s%(levelname)-8s%(reset)s %(white)s%(message)s"
-formatter = ColoredFormatter(LOG_FORMAT)
+formatter = ColoredFormatter(LOG_FORMAT, reset=True, log_colors={
+    'DEBUG': 'blue',  # Changed to blue for better visibility
+    'INFO': 'green',
+    'WARNING': 'yellow',
+    'ERROR': 'red',
+    'CRITICAL': 'red,bg_white'
+})
 
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
@@ -190,7 +196,7 @@ def update_xlsx_with_zenodo_links(xlsx_file, sheet_names):
 
             # Populate author_email column if not already populated
             if not author_email_cell.value and link_as_text_cell.value:
-                author_email = extract_ucy_author_email(link_as_text_cell.value)
+                author_email = extract_ucy_author_email(link_as_text_cell.value, sheet_name, entry_id)
                 if author_email:
                     author_email_cell.value = author_email
 
@@ -281,112 +287,113 @@ def update_xlsx_with_zenodo_links(xlsx_file, sheet_names):
     output_email_file = "authors_without_zenodo_entries.txt"
     prepare_email_file(xlsx_file, sheet_names, output_email_file)
 
-def extract_ucy_author_email(link):
+def extract_ucy_author_email(link, sheet_name=None, entry_id=None, indent_level=0):
     """Extract the email address of the author with ucy.ac.cy domain from the given link."""
-    logger.debug(f"Starting email extraction for link: {link}")
+    log_with_context(f"Starting email extraction for link: {link}", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level)
 
     if "ieee.org" in link:
-        logger.debug("Link contains 'ieee.org', proceeding to fetch metadata.")
-        json = fetch_ieee_metadata(link)
+        log_with_context("Link contains 'ieee.org', proceeding to fetch metadata.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 1)
+        json = fetch_ieee_metadata(link, sheet_name, entry_id, indent_level=indent_level + 1)
         if not json:
-            logger.debug("No JSON metadata fetched from IEEE link.")
+            log_with_context("No JSON metadata fetched from IEEE link.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 2)
             return None
 
-        logger.debug(f"JSON metadata fetched: {json}")
-        email = extract_email_from_ieee_json(json)
+        log_with_context(f"JSON metadata fetched: {json}", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 2)
+        email = extract_email_from_ieee_json(json, sheet_name, entry_id, indent_level=indent_level + 2)
         if email:
-            logger.debug(f"Email extracted from JSON metadata: {email}")
+            log_with_context(f"Email extracted from JSON metadata: {email}", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 2)
             return email
 
-        logger.debug("No email found in JSON metadata, checking for specific author exceptions.")
+        log_with_context("No email found in JSON metadata, checking for specific author exceptions.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 2)
         # Handle exceptions for specific authors
         if "Thomas Parisini" in json:
-            logger.debug("Found 'Thomas Parisini' in JSON, returning exception email.")
+            log_with_context("Found 'Thomas Parisini' in JSON, returning exception email.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 3)
             return "parisini.thomas@ucy.ac.cy"
         if "Alessandro Astolfi" in json:
-            logger.debug("Found 'Alessandro Astolfi' in JSON, returning exception email.")
+            log_with_context("Found 'Alessandro Astolfi' in JSON, returning exception email.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 3)
             return "astolfi.alessandro@ucy.ac.cy"
 
-    logger.debug("Link does not contain 'ieee.org' or no email found, returning None.")
+    log_with_context("Link does not contain 'ieee.org' or no email found, returning None.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 1)
     return None
 
-def fetch_ieee_metadata(link):
+def fetch_ieee_metadata(link, sheet_name=None, entry_id=None, indent_level=0):
     """Fetch metadata from an IEEE link."""
-    logger.debug(f"Fetching IEEE metadata for link: {link}")
+    log_with_context(f"Fetching IEEE metadata for link: {link}", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level)
     json = None
     try:
         response = requests.get(link, headers={"User-Agent": CURL_UA})
-        logger.debug(f"HTTP response status code: {response.status_code}")
+        log_with_context(f"HTTP response status code: {response.status_code}", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 1)
         if response.status_code == 200:
-            json = extract_ieee_json(response.text)
-            logger.debug(f"Extracted JSON from response: {json}")
+            json = extract_ieee_json(response.text, sheet_name, entry_id, indent_level=indent_level + 1)
+            log_with_context(f"Extracted JSON from response: {json}", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 2)
         else:
-            logger.debug(f"Failed to fetch metadata, status code: {response.status_code}")
+            log_with_context(f"Failed to fetch metadata, status code: {response.status_code}", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 1)
     except Exception as e:
-        logger.error(f"Error fetching IEEE metadata: {e}")
+        log_with_context(f"Error fetching IEEE metadata: {e}", sheet_name, entry_id, level=logging.ERROR, indent_level=indent_level + 1)
     return json
 
-def extract_ieee_json(html):
+def extract_ieee_json(html, sheet_name=None, entry_id=None, indent_level=0):
     """Extract JSON metadata from IEEE HTML."""
-    logger.debug("Extracting JSON metadata from HTML.")
-    # Updated regex to match the JSON metadata structure in the provided HTML sample
+    log_with_context("Extracting JSON metadata from HTML.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level)
     match = re.search(r'xplGlobal\.document\.metadata\s*=\s*(\{.*?\})\s*;', html)
     if match:
-        logger.debug("JSON metadata found in HTML.")
+        log_with_context("JSON metadata found in HTML.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 1)
         return json.loads(match.group(1))
-    logger.debug("No JSON metadata found in HTML.")
+    log_with_context("No JSON metadata found in HTML.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 1)
     return None
 
-def extract_email_from_ieee_json(json):
+def extract_email_from_ieee_json(json, sheet_name=None, entry_id=None, indent_level=0):
     """Extract the email address of the first author with ucy.ac.cy domain."""
-    logger.debug("Extracting email from JSON metadata.")
+    log_with_context("Extracting email from JSON metadata.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level)
     for author in json.get("authors", []):
-        logger.debug(f"Processing author: {author}")
+        log_with_context(f"Processing author: {author}", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 1)
         for affiliation in author.get("affiliation", []):
-            logger.debug(f"Checking affiliation: {affiliation}")
+            log_with_context(f"Checking affiliation: {affiliation}", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 2)
             if "ucy.ac.cy" in affiliation:
                 email = f"{author['lastName'].lower()}.{author['firstName'].lower()}@ucy.ac.cy"
-                logger.debug(f"Found email: {email}")
+                log_with_context(f"Found email: {email}", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 2)
                 return email
 
-    logger.debug("No email found with 'ucy.ac.cy' domain. Attempting to construct email from names.")
-    # Attempt to construct email from names of authors with "University of Cyprus" in their affiliation
+    log_with_context("No email found with 'ucy.ac.cy' domain. Attempting to construct email from names.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 1)
     for author in json.get("authors", []):
         for affiliation in author.get("affiliation", []):
             if "University of Cyprus" in affiliation:
                 first_name = author['firstName'].split()[0].lower()
                 last_name = author['lastName'].split()[0].lower()
                 email = f"{last_name}.{first_name}@ucy.ac.cy"
-                logger.debug(f"Constructed email: {email}")
+                log_with_context(f"Constructed email: {email}", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 2)
                 return email
 
-    logger.debug("No authors with 'University of Cyprus' affiliation found. Checking for specific exceptions.")
-    # Handle exceptions for specific authors
+    log_with_context("No authors with 'University of Cyprus' affiliation found. Checking for specific exceptions.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 1)
     for author in json.get("authors", []):
         if author['firstName'] == "Thomas" and author['lastName'] == "Parisini":
-            logger.debug("Found 'Thomas Parisini', returning exception email.")
+            log_with_context("Found 'Thomas Parisini', returning exception email.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 2)
             return "parisini.thomas@ucy.ac.cy"
         if author['lastName'] == "Astolfi":
-            logger.debug("Found 'Astolfi', returning exception email.")
+            log_with_context("Found 'Astolfi', returning exception email.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 2)
             return "astolfi.alessandro@ucy.ac.cy"
 
-    logger.debug("No solution found for email extraction.")
+    log_with_context("No solution found for email extraction.", sheet_name, entry_id, level=logging.DEBUG, indent_level=indent_level + 1)
     return None
 
-def log_with_context(message, sheet_name, entry_id, level=logging.INFO, indent_level=0):
+def log_with_context(message, sheet_name=None, entry_id=None, level=logging.INFO, indent_level=0):
     """Log a message with context (sheet name and entry ID) and indentation."""
     indent = "   " * indent_level
-    context = f"[Sheet: {sheet_name}, Entry ID: {entry_id}]"
+    context = ""
+    if sheet_name and entry_id:
+        context = f"[Sheet: {sheet_name}, Entry ID: {entry_id}] "
+    formatted_message = f"{indent}{context}{message}"
+
     if level == logging.DEBUG:
-        logger.debug(f"{indent}{context} {message}")
+        logger.debug(f"{indent}{formatted_message}")  # Ensure DEBUG logs are indented
     elif level == logging.INFO:
-        logger.info(f"{indent}{context} {message}")
+        logger.info(formatted_message)
     elif level == logging.WARNING:
-        logger.warning(f"{indent}{context} {message}")
+        logger.warning(formatted_message)
     elif level == logging.ERROR:
-        logger.error(f"{indent}{context} {message}")
+        logger.error(formatted_message)
     elif level == logging.CRITICAL:
-        logger.critical(f"{indent}{context} {message}")
+        logger.critical(formatted_message)
 
 if __name__ == "__main__":
     xlsx_file_path = "OS Info -  KIOS PUBLICATIONS FOR 2017-2018-2019-2020-2021_2022_2023_2024.xlsx"
