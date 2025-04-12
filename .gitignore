@@ -6,6 +6,8 @@ __pycache__/
 *.csv
 *.tmp
 *.html
+*.txt
+~.*
 
 # C extensions
 *.so
